@@ -6,22 +6,35 @@ use winit::{
     window::WindowBuilder,
 };
 
+#[cfg(not(feature = "winit"))]
+fn no_winit_ezgl(window: &winit::window::Window, size: winit::dpi::PhysicalSize<u32>) -> Ezgl {
+    #[cfg(unix)]
+    let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook)
+        as ezgl::glutin::api::glx::XlibErrorHookRegistrar);
+
+    #[cfg(not(unix))]
+    let reg = None;
+
+    Ezgl::new(&window, size.width, size.height, reg).unwrap()
+}
+
 fn main() {
     env_logger::init();
 
+    // 1. make a window with HasRawWindowHandle + HasRawDisplayHandle
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut size = window.inner_size();
 
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook)
-        as ezgl::glutin::api::glx::XlibErrorHookRegistrar);
+    // 2. if it's a winit window, use with_winit_window
+    #[cfg(feature = "winit")]
+    let ezgl = Ezgl::with_winit_window(&window).unwrap();
 
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
-    let reg = None;
+    // 2a. or don't
+    #[cfg(not(feature = "winit"))]
+    let ezgl = no_winit_ezgl(&window, size);
 
-    let ezgl = Ezgl::new(&window, size.width, size.height, reg).unwrap();
-
+    // 3. off we go!
     unsafe { ezgl.clear_color(0.1, 0.2, 0.3, 1.0) };
 
     event_loop.run(move |evt, _, flow| {

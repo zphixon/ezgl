@@ -1,6 +1,9 @@
 pub use glow as gl;
 pub use glutin;
 
+#[cfg(feature = "winit")]
+pub use winit;
+
 use gl::Context;
 use glutin::{
     api::glx::XlibErrorHookRegistrar,
@@ -25,6 +28,20 @@ pub struct Ezgl {
 }
 
 impl Ezgl {
+    #[cfg(feature = "winit")]
+    pub fn with_winit_window(window: &winit::window::Window) -> Result<Self> {
+        let winit::dpi::PhysicalSize { width, height } = window.inner_size();
+
+        #[cfg(unix)]
+        let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook)
+            as glutin::api::glx::XlibErrorHookRegistrar);
+
+        #[cfg(not(unix))]
+        let reg = None;
+
+        Self::new(window, width, height, reg)
+    }
+
     pub fn new<H: HasRawWindowHandle + HasRawDisplayHandle>(
         window: &H,
         width: u32,
@@ -46,7 +63,7 @@ impl Ezgl {
                         accum
                     }
                 })
-                .expect("No configs found: perhaps try passing Some(reg)")
+                .expect("No configs found :(")
         };
 
         let attributes = surface_attributes(&window, width, height);
