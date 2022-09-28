@@ -1,4 +1,4 @@
-use ezgl::{gl, winit};
+use ezgl::{gl, Ezgl};
 use gl::HasContext;
 use winit::{
     event::{Event, WindowEvent},
@@ -12,7 +12,15 @@ fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut size = window.inner_size();
-    let ezgl = ezgl::Ezgl::new(&window);
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook)
+        as ezgl::glutin::api::glx::XlibErrorHookRegistrar);
+
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    let reg = None;
+
+    let ezgl = Ezgl::new(&window, size.width, size.height, reg).unwrap();
 
     unsafe { ezgl.clear_color(0.1, 0.2, 0.3, 1.0) };
 
@@ -33,7 +41,7 @@ fn main() {
                 }
 
                 WindowEvent::Resized(new_size) => {
-                    ezgl.resize(new_size);
+                    ezgl.resize(new_size.width, new_size.height);
                     size = new_size;
                 }
 

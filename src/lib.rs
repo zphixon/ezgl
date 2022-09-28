@@ -1,22 +1,22 @@
-use gl::Context;
 pub use glow as gl;
-pub extern crate glutin;
-pub extern crate winit;
+pub use glutin;
 
+use gl::Context;
 use glutin::{
+    api::glx::XlibErrorHookRegistrar,
     config::{ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder, GlConfig},
     context::{
         ContextApi, ContextAttributesBuilder, NotCurrentGlContextSurfaceAccessor,
         PossiblyCurrentContext, PossiblyCurrentGlContext,
     },
     display::{Display, GlDisplay},
+    error::Result,
     surface::{GlSurface, Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
 };
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use std::num::NonZeroU32;
-use winit::{dpi::PhysicalSize, window::Window};
 
 pub struct Ezgl {
     surface: Surface<WindowSurface>,
@@ -25,16 +25,20 @@ pub struct Ezgl {
 }
 
 impl Ezgl {
-    pub fn new(window: &Window) -> Self {
+    pub fn new<H: HasRawWindowHandle + HasRawDisplayHandle>(
+        window: &H,
+        width: u32,
+        height: u32,
+        reg: Option<XlibErrorHookRegistrar>,
+    ) -> Result<Self> {
         let display_handle = window.raw_display_handle();
         let window_handle = window.raw_window_handle();
-        let display = create_display(display_handle, window_handle);
+        let display = create_display(display_handle, window_handle, reg)?;
         let template = config_template(window_handle);
 
         let config = unsafe {
             display
-                .find_configs(template)
-                .unwrap()
+                .find_configs(template)?
                 .reduce(|accum, config| {
                     if config.sample_buffers() > accum.sample_buffers() {
                         config
@@ -42,11 +46,11 @@ impl Ezgl {
                         accum
                     }
                 })
-                .unwrap()
+                .expect("No configs found: perhaps try passing Some(reg)")
         };
 
-        let attributes = surface_attributes(&window);
-        let surface = unsafe { display.create_window_surface(&config, &attributes).unwrap() };
+        let attributes = surface_attributes(&window, width, height);
+        let surface = unsafe { display.create_window_surface(&config, &attributes)? };
         let context_attributes = ContextAttributesBuilder::new().build(Some(window_handle));
 
         let fallback_context_attributes = ContextAttributesBuilder::new()
@@ -56,14 +60,10 @@ impl Ezgl {
         let context = unsafe {
             display
                 .create_context(&config, &context_attributes)
-                .unwrap_or_else(|_| {
-                    display
-                        .create_context(&config, &fallback_context_attributes)
-                        .expect("failed to create context")
-                })
+                .or_else(|_| display.create_context(&config, &fallback_context_attributes))?
         };
 
-        let glutin = context.make_current(&surface).unwrap();
+        let glutin = context.make_current(&surface)?;
         let glow = unsafe {
             Context::from_loader_function(|symbol| {
                 let cstring = std::ffi::CString::new(symbol).unwrap();
@@ -71,26 +71,26 @@ impl Ezgl {
             })
         };
 
-        Self {
+        Ok(Self {
             surface,
             glutin,
             glow,
-        }
+        })
     }
 
-    pub fn resize(&self, size: PhysicalSize<u32>) {
-        if size.width == 0 || size.height == 0 {
+    pub fn resize(&self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
             return;
         }
 
         self.surface.resize(
             &self.glutin,
-            NonZeroU32::new(size.width).unwrap(),
-            NonZeroU32::new(size.height).unwrap(),
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
         );
     }
 
-    pub fn swap_buffers(&self) -> Result<(), glutin::error::Error> {
+    pub fn swap_buffers(&self) -> Result<()> {
         self.surface.swap_buffers(&self.glutin)
     }
 }
@@ -102,12 +102,19 @@ impl std::ops::Deref for Ezgl {
     }
 }
 
-fn create_display(raw_display: RawDisplayHandle, _raw_window_handle: RawWindowHandle) -> Display {
+fn create_display(
+    raw_display: RawDisplayHandle,
+    _raw_window_handle: RawWindowHandle,
+    _reg: Option<XlibErrorHookRegistrar>,
+) -> Result<Display> {
     use glutin::display::DisplayApiPreference;
 
     #[cfg(all(unix, not(target_os = "macos")))]
-    let preference =
-        DisplayApiPreference::GlxThenEgl(Box::new(winit::platform::unix::register_xlib_error_hook));
+    let preference = if let Some(reg) = _reg {
+        DisplayApiPreference::GlxThenEgl(reg)
+    } else {
+        DisplayApiPreference::Egl
+    };
 
     #[cfg(all(unix, target_os = "macos"))]
     let preference = DisplayApiPreference::Cgl;
@@ -115,7 +122,7 @@ fn create_display(raw_display: RawDisplayHandle, _raw_window_handle: RawWindowHa
     #[cfg(windows)]
     let preference = DisplayApiPreference::Wgl(Some(_raw_window_handle));
 
-    unsafe { Display::from_raw(raw_display, preference).unwrap() }
+    unsafe { Display::from_raw(raw_display, preference) }
 }
 
 fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
@@ -127,8 +134,11 @@ fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
     builder.build()
 }
 
-fn surface_attributes(window: &Window) -> SurfaceAttributes<WindowSurface> {
-    let (width, height): (u32, u32) = window.inner_size().into();
+fn surface_attributes<H: HasRawWindowHandle + HasRawDisplayHandle>(
+    window: &H,
+    width: u32,
+    height: u32,
+) -> SurfaceAttributes<WindowSurface> {
     let raw_window_handle = window.raw_window_handle();
     SurfaceAttributesBuilder::<WindowSurface>::new().build(
         raw_window_handle,
