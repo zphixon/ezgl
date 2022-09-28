@@ -1,5 +1,6 @@
 pub use glow as gl;
 pub use glutin;
+pub use raw_window_handle;
 
 #[cfg(feature = "winit")]
 pub use winit;
