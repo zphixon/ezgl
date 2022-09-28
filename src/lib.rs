@@ -20,12 +20,12 @@ use glutin::{
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32, sync::Arc};
 
 pub struct Ezgl {
     surface: Surface<WindowSurface>,
     glutin: PossiblyCurrentContext,
-    glow: Context,
+    glow: Arc<Context>,
 }
 
 impl Ezgl {
@@ -82,12 +82,12 @@ impl Ezgl {
         };
 
         let glutin = context.make_current(&surface)?;
-        let glow = unsafe {
+        let glow = Arc::new(unsafe {
             Context::from_loader_function(|symbol| {
                 let cstring = std::ffi::CString::new(symbol).unwrap();
                 glutin.get_proc_address(&cstring)
             })
-        };
+        });
 
         Ok(Self {
             surface,
@@ -112,8 +112,8 @@ impl Ezgl {
         self.surface.swap_buffers(&self.glutin)
     }
 
-    pub fn glow_context(&self) -> &Context {
-        &self.glow
+    pub fn glow_context(&self) -> Arc<Context> {
+        Arc::clone(&self.glow)
     }
 }
 
