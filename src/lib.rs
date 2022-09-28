@@ -111,6 +111,10 @@ impl Ezgl {
     pub fn swap_buffers(&self) -> Result<()> {
         self.surface.swap_buffers(&self.glutin)
     }
+
+    pub fn glow_context(&self) -> &Context {
+        &self.glow
+    }
 }
 
 impl std::ops::Deref for Ezgl {
