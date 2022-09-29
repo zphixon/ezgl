@@ -1,13 +1,14 @@
+//! Easy GL setup via [glutin]/[glow] for the user who doesn't care how they get their context.
+//!
+//! This crate reexports [glow] as `gl`, as well as [glutin] and [raw_window_handle]. Additionally
+//! [winit](docs.rs/winit) is available if `feature = "winit"` is enabled.
+
 pub use glow as gl;
 pub use glutin;
 pub use raw_window_handle;
 
 #[cfg(feature = "winit")]
 pub use winit;
-
-// duplicate of glutin::api::glx::XlibErrorHookRegistrar
-pub type Reg =
-    Box<dyn Fn(Box<dyn Fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> bool + Send + Sync>)>;
 
 use gl::Context;
 use glutin::{
@@ -25,6 +26,15 @@ use raw_window_handle::{
 };
 use std::{num::NonZeroU32, sync::Arc};
 
+/// Duplicate of [glutin::api::glx::XlibErrorHookRegistrar], except without the OS-based feature
+/// gate.
+pub type Reg =
+    Box<dyn Fn(Box<dyn Fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> bool + Send + Sync>)>;
+
+/// Struct handling GL information.
+///
+/// This type implements Deref into [Context]. Note that [ezgl::gl::HasContext](glow::HasContext)
+/// must be in scope for GL functions to be available.
 pub struct Ezgl {
     surface: Surface<WindowSurface>,
     glutin: PossiblyCurrentContext,
@@ -32,6 +42,10 @@ pub struct Ezgl {
 }
 
 impl Ezgl {
+    /// Requires `feature = "winit"`.
+    ///
+    /// Set up ezgl using a winit [Window](winit::window::Window) directly, rather than through
+    /// [HasRawWindowHandle] + [HasRawDisplayHandle] as in [Ezgl::new].
     #[cfg(feature = "winit")]
     pub fn with_winit_window(window: &winit::window::Window) -> Result<Self> {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
@@ -45,6 +59,9 @@ impl Ezgl {
         Self::new(window, width, height, reg)
     }
 
+    /// Set up ezgl.
+    ///
+    /// Requires a window that implements [HasRawWindowHandle] + [HasRawDisplayHandle].
     pub fn new<H: HasRawWindowHandle + HasRawDisplayHandle>(
         window: &H,
         width: u32,
@@ -98,6 +115,10 @@ impl Ezgl {
         })
     }
 
+    /// Resize the GL surface.
+    ///
+    /// This method does not resize the GL viewport. If width or height are zero this method does
+    /// nothing. Delegates to [Surface::resize].
     pub fn resize(&self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -110,10 +131,14 @@ impl Ezgl {
         );
     }
 
+    /// Display the next frame.
+    ///
+    /// Delegates to [Surface::swap_buffers].
     pub fn swap_buffers(&self) -> Result<()> {
         self.surface.swap_buffers(&self.glutin)
     }
 
+    /// Increase the reference count of the inner glow [Context].
     pub fn glow_context(&self) -> Arc<Context> {
         Arc::clone(&self.glow)
     }

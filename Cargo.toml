@@ -3,6 +3,9 @@ name = 'ezgl'
 version = '0.1.0'
 edition = '2021'
 
+[package.metadata.docs.rs]
+features = ['winit']
+
 [dependencies]
 glutin = { version = '0.30.0-beta.2', features = ['wgl'] }
 glow = '0.11.2'
