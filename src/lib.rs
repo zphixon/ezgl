@@ -5,9 +5,12 @@ pub use raw_window_handle;
 #[cfg(feature = "winit")]
 pub use winit;
 
+// duplicate of glutin::api::glx::XlibErrorHookRegistrar
+pub type Reg =
+    Box<dyn Fn(Box<dyn Fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> bool + Send + Sync>)>;
+
 use gl::Context;
 use glutin::{
-    api::glx::XlibErrorHookRegistrar,
     config::{ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder, GlConfig},
     context::{
         ContextApi, ContextAttributesBuilder, NotCurrentGlContextSurfaceAccessor,
@@ -34,8 +37,7 @@ impl Ezgl {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
         #[cfg(unix)]
-        let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook)
-            as glutin::api::glx::XlibErrorHookRegistrar);
+        let reg = Some(Box::new(winit::platform::unix::register_xlib_error_hook) as Reg);
 
         #[cfg(not(unix))]
         let reg = None;
@@ -47,7 +49,7 @@ impl Ezgl {
         window: &H,
         width: u32,
         height: u32,
-        reg: Option<XlibErrorHookRegistrar>,
+        reg: Option<Reg>,
     ) -> Result<Self> {
         let display_handle = window.raw_display_handle();
         let window_handle = window.raw_window_handle();
@@ -127,7 +129,7 @@ impl std::ops::Deref for Ezgl {
 fn create_display(
     raw_display: RawDisplayHandle,
     _raw_window_handle: RawWindowHandle,
-    _reg: Option<XlibErrorHookRegistrar>,
+    _reg: Option<Reg>,
 ) -> Result<Display> {
     use glutin::display::DisplayApiPreference;
 
