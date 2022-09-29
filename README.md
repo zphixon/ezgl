@@ -14,3 +14,4 @@ Todo:
   - [ ] Android
   - [ ] iOS
   - [ ] Web
+- [ ] More configuration (sample size, bit depth, transparency)
