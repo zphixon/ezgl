@@ -142,6 +142,16 @@ impl Ezgl {
     pub fn glow_context(&self) -> Arc<Context> {
         Arc::clone(&self.glow)
     }
+
+    /// Get the (possibly) current glutin context.
+    pub fn glutin(&self) -> &PossiblyCurrentContext {
+        &self.glutin
+    }
+
+    /// Get the surface corresponding with the window.
+    pub fn surface(&self) -> &Surface<WindowSurface> {
+        &self.surface
+    }
 }
 
 impl std::ops::Deref for Ezgl {
