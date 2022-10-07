@@ -55,6 +55,7 @@ fn main() {
 
                 WindowEvent::Resized(new_size) => {
                     ezgl.resize(new_size.width, new_size.height);
+                    unsafe { ezgl.viewport(0, 0, new_size.width as i32, new_size.height as i32) };
                     size = new_size;
                 }
 
