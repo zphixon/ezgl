@@ -189,9 +189,11 @@ fn surface_attributes<H: HasRawWindowHandle + HasRawDisplayHandle>(
     height: u32,
 ) -> SurfaceAttributes<WindowSurface> {
     let raw_window_handle = window.raw_window_handle();
-    SurfaceAttributesBuilder::<WindowSurface>::new().build(
-        raw_window_handle,
-        NonZeroU32::new(width).unwrap(),
-        NonZeroU32::new(height).unwrap(),
-    )
+    SurfaceAttributesBuilder::<WindowSurface>::new()
+        .with_srgb(Some(true))
+        .build(
+            raw_window_handle,
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+        )
 }
