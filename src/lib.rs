@@ -47,7 +47,10 @@ impl Ezgl {
     /// Set up ezgl using a winit [Window](winit::window::Window) directly, rather than through
     /// [HasRawWindowHandle] + [HasRawDisplayHandle] as in [Ezgl::new].
     #[cfg(feature = "winit")]
-    pub fn with_winit_window(window: &winit::window::Window) -> Result<Self> {
+    pub fn with_winit_window(
+        window: &winit::window::Window,
+        prefer_samples: Option<u8>,
+    ) -> Result<Self> {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
         #[cfg(unix)]
@@ -56,17 +59,20 @@ impl Ezgl {
         #[cfg(not(unix))]
         let reg = None;
 
-        Self::new(window, width, height, reg)
+        Self::new(window, width, height, reg, prefer_samples)
     }
 
     /// Set up ezgl.
     ///
-    /// Requires a window that implements [HasRawWindowHandle] + [HasRawDisplayHandle].
+    /// Requires a window that implements [HasRawWindowHandle] + [HasRawDisplayHandle]. If
+    /// `prefer_samples` is None, the context configuration with the greatest number of sample
+    /// buffers is preferred.
     pub fn new<H: HasRawWindowHandle + HasRawDisplayHandle>(
         window: &H,
         width: u32,
         height: u32,
         reg: Option<Reg>,
+        prefer_samples: Option<u8>,
     ) -> Result<Self> {
         let display_handle = window.raw_display_handle();
         let window_handle = window.raw_window_handle();
@@ -77,10 +83,18 @@ impl Ezgl {
             display
                 .find_configs(template)?
                 .reduce(|accum, config| {
-                    if config.sample_buffers() > accum.sample_buffers() {
-                        config
+                    if let Some(samples) = prefer_samples {
+                        if config.sample_buffers() == samples {
+                            config
+                        } else {
+                            accum
+                        }
                     } else {
-                        accum
+                        if config.sample_buffers() > accum.sample_buffers() {
+                            config
+                        } else {
+                            accum
+                        }
                     }
                 })
                 .expect("No configs found :(")

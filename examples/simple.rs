@@ -15,7 +15,7 @@ fn no_winit_ezgl(window: &winit::window::Window, size: winit::dpi::PhysicalSize<
     #[cfg(not(unix))]
     let reg = None;
 
-    Ezgl::new(&window, size.width, size.height, reg).unwrap()
+    Ezgl::new(&window, size.width, size.height, reg, None).unwrap()
 }
 
 fn main() {
@@ -28,7 +28,7 @@ fn main() {
 
     // 2. if it's a winit window, use with_winit_window
     #[cfg(feature = "winit")]
-    let ezgl = Ezgl::with_winit_window(&window).unwrap();
+    let ezgl = Ezgl::with_winit_window(&window, None).unwrap();
 
     // 2a. or don't
     #[cfg(not(feature = "winit"))]

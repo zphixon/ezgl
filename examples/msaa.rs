@@ -19,7 +19,10 @@ fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut size = window.inner_size();
-    let ezgl = Ezgl::with_winit_window(&window).unwrap();
+
+    // pass preferred samples to constructor
+    let samples = 4i32;
+    let ezgl = Ezgl::with_winit_window(&window, Some(samples as u8)).unwrap();
 
     // do msaa setup (see https://learnopengl.com/Advanced-OpenGL/Anti-Aliasing)
     let fb = unsafe {
@@ -35,7 +38,7 @@ fn main() {
         ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, Some(tex));
         ezgl.tex_image_2d_multisample(
             gl::TEXTURE_2D_MULTISAMPLE,
-            4,
+            samples,
             gl::RGBA8 as i32,
             size.width as i32,
             size.height as i32,
@@ -146,7 +149,7 @@ fn main() {
                         ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, Some(tex));
                         ezgl.tex_image_2d_multisample(
                             gl::TEXTURE_2D_MULTISAMPLE,
-                            4,
+                            samples,
                             gl::RGBA8 as i32,
                             size.width as i32,
                             size.height as i32,
