@@ -15,7 +15,7 @@ use glutin::{
     config::{ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder, GlConfig},
     context::{
         ContextApi, ContextAttributesBuilder, NotCurrentGlContextSurfaceAccessor,
-        PossiblyCurrentContext, PossiblyCurrentGlContext,
+        PossiblyCurrentContext,
     },
     display::{Display, GlDisplay},
     error::Result,
@@ -84,13 +84,13 @@ impl Ezgl {
                 .find_configs(template)?
                 .reduce(|accum, config| {
                     if let Some(samples) = prefer_samples {
-                        if config.sample_buffers() == samples {
+                        if config.num_samples() == samples {
                             config
                         } else {
                             accum
                         }
                     } else {
-                        if config.sample_buffers() > accum.sample_buffers() {
+                        if config.num_samples() > accum.num_samples() {
                             config
                         } else {
                             accum
@@ -118,7 +118,7 @@ impl Ezgl {
         let glow = Arc::new(unsafe {
             Context::from_loader_function(|symbol| {
                 let cstring = std::ffi::CString::new(symbol).unwrap();
-                glutin.get_proc_address(&cstring)
+                display.get_proc_address(&cstring)
             })
         });
 
@@ -195,7 +195,7 @@ fn create_display(
     #[cfg(windows)]
     let preference = DisplayApiPreference::Wgl(Some(_raw_window_handle));
 
-    unsafe { Display::from_raw(raw_display, preference) }
+    unsafe { Display::new(raw_display, preference) }
 }
 
 fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {

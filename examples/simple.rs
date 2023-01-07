@@ -37,8 +37,11 @@ fn main() {
     // 3. off we go!
     unsafe { ezgl.clear_color(0.1, 0.2, 0.3, 1.0) };
 
+    use glutin::surface::GlSurface;
+
     event_loop.run(move |evt, _, flow| {
         log::trace!("{:?}", evt);
+        assert!(ezgl.surface().is_current(ezgl.glutin()));
 
         flow.set_wait();
 
