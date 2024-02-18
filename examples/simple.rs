@@ -39,6 +39,7 @@ fn main() {
 
     let result = event_loop.run(move |evt, loop_target| {
         log::trace!("{:?}", evt);
+        use ezgl::glutin::prelude::GlSurface;
         assert!(ezgl.surface().is_current(ezgl.glutin()));
 
         loop_target.set_control_flow(ControlFlow::Wait);
