@@ -1,22 +1,22 @@
 [package]
 name = 'ezgl'
-version = '0.1.0'
+version = '0.2.0'
 edition = '2021'
 
 [package.metadata.docs.rs]
 features = ['winit']
 
 [dependencies]
-glutin = { version = '0.30.0-beta.2', features = ['wgl'] }
-glow = '0.11.2'
-raw-window-handle = '0.5.0'
-winit = { version = '0.27.3', optional = true }
+glutin = { version = '0.31.3', features = ['wgl'] }
+glow = '0.13.1'
+raw-window-handle = '0.5.2'
+winit = { version = '0.29.10', optional = true, features = ['rwh_05'] }
 
 [features]
-default = []
+default = ['winit']
 winit = ['dep:winit']
 
 [dev-dependencies]
-winit = '0.27.3'
+winit = '0.29.10'
 env_logger = '*'
 log = '*'

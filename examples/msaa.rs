@@ -9,14 +9,14 @@ fn main() {
     use gl::HasContext;
     use winit::{
         event::{Event, WindowEvent},
-        event_loop::EventLoop,
+        event_loop::{ControlFlow, EventLoop},
         window::WindowBuilder,
     };
 
     env_logger::init();
 
     // normal setup to begin with
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut size = window.inner_size();
 
@@ -26,6 +26,8 @@ fn main() {
 
     // do msaa setup (see https://learnopengl.com/Advanced-OpenGL/Anti-Aliasing)
     let fb = unsafe {
+        ezgl.enable(gl::DEBUG_OUTPUT);
+
         ezgl.clear_color(0.1, 0.2, 0.3, 1.0);
         ezgl.enable(gl::MULTISAMPLE);
 
@@ -95,45 +97,49 @@ fn main() {
 
         ezgl.use_program(Some(program));
 
+        // now requires a vertex array be bound?
+        let triangle_vertex_array = ezgl.create_vertex_array().unwrap();
+        ezgl.bind_vertex_array(Some(triangle_vertex_array));
+
         fb
     };
 
-    event_loop.run(move |evt, _, flow| {
+    let result = event_loop.run(move |evt, loop_target| {
         log::trace!("{:?}", evt);
 
-        flow.set_wait();
+        loop_target.set_control_flow(ControlFlow::Wait);
 
         match evt {
-            Event::RedrawRequested(_) => unsafe {
-                // 1. bind multisampled framebuffer
-                ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
-
-                // 2. draw scene like normal
-                ezgl.clear(gl::COLOR_BUFFER_BIT);
-                ezgl.draw_arrays(gl::TRIANGLES, 0, 3);
-
-                // 3. copy multisampled buffer to backbuffer
-                ezgl.bind_framebuffer(gl::READ_FRAMEBUFFER, Some(fb));
-                ezgl.bind_framebuffer(gl::DRAW_FRAMEBUFFER, None);
-                ezgl.blit_framebuffer(
-                    0,
-                    0,
-                    size.width as i32,
-                    size.height as i32,
-                    0,
-                    0,
-                    size.width as i32,
-                    size.height as i32,
-                    gl::COLOR_BUFFER_BIT,
-                    gl::NEAREST,
-                );
-
-                ezgl.swap_buffers().unwrap();
-            },
-
             Event::WindowEvent { event, .. } => match event {
+                WindowEvent::RedrawRequested => unsafe {
+                    // 1. bind multisampled framebuffer
+                    ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
+
+                    // 2. draw scene like normal
+                    ezgl.clear(gl::COLOR_BUFFER_BIT);
+                    ezgl.draw_arrays(gl::TRIANGLES, 0, 3);
+
+                    // 3. copy multisampled buffer to backbuffer
+                    ezgl.bind_framebuffer(gl::READ_FRAMEBUFFER, Some(fb));
+                    ezgl.bind_framebuffer(gl::DRAW_FRAMEBUFFER, None);
+                    ezgl.blit_framebuffer(
+                        0,
+                        0,
+                        size.width as i32,
+                        size.height as i32,
+                        0,
+                        0,
+                        size.width as i32,
+                        size.height as i32,
+                        gl::COLOR_BUFFER_BIT,
+                        gl::NEAREST,
+                    );
+
+                    ezgl.swap_buffers().unwrap();
+                },
+
                 WindowEvent::CloseRequested => {
-                    flow.set_exit();
+                    loop_target.exit();
                 }
 
                 WindowEvent::Resized(new_size) => {
@@ -182,4 +188,6 @@ fn main() {
             _ => {}
         }
     });
+
+    result.unwrap();
 }

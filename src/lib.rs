@@ -10,13 +10,10 @@ pub use raw_window_handle;
 #[cfg(feature = "winit")]
 pub use winit;
 
-use gl::Context;
+use gl::{Context, HasContext};
 use glutin::{
     config::{ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder, GlConfig},
-    context::{
-        ContextApi, ContextAttributesBuilder, NotCurrentGlContextSurfaceAccessor,
-        PossiblyCurrentContext, PossiblyCurrentGlContext,
-    },
+    context::{ContextApi, ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
     display::{Display, GlDisplay},
     error::Result,
     surface::{GlSurface, Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
@@ -30,6 +27,42 @@ use std::{num::NonZeroU32, sync::Arc};
 /// gate.
 pub type Reg =
     Box<dyn Fn(Box<dyn Fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> bool + Send + Sync>)>;
+
+fn default_debug_callback(source: u32, type_: u32, id: u32, severity: u32, message: &str) {
+    println!(
+        "DEBUG: {}: severity={} source={} type={} id={}",
+        message,
+        match severity {
+            gl::DEBUG_SEVERITY_HIGH => "HIGH",
+            gl::DEBUG_SEVERITY_MEDIUM => "MEDIUM",
+            gl::DEBUG_SEVERITY_LOW => "LOW",
+            gl::DEBUG_SEVERITY_NOTIFICATION => "NOTIFICATION",
+            _ => "unknown",
+        },
+        match source {
+            gl::DEBUG_SOURCE_API => "API",
+            gl::DEBUG_SOURCE_WINDOW_SYSTEM => "WINDOW_SYSTEM",
+            gl::DEBUG_SOURCE_SHADER_COMPILER => "SHADER_COMPILER",
+            gl::DEBUG_SOURCE_THIRD_PARTY => "THIRD_PARTY",
+            gl::DEBUG_SOURCE_APPLICATION => "APPLICATION",
+            gl::DEBUG_SOURCE_OTHER => "OTHER",
+            _ => "unknown",
+        },
+        match type_ {
+            gl::DEBUG_TYPE_ERROR => "ERROR",
+            gl::DEBUG_TYPE_DEPRECATED_BEHAVIOR => "DEPRECATED_BEHAVIOR",
+            gl::DEBUG_TYPE_UNDEFINED_BEHAVIOR => "UNDEFINED_BEHAVIOR",
+            gl::DEBUG_TYPE_PORTABILITY => "PORTABILITY",
+            gl::DEBUG_TYPE_PERFORMANCE => "PERFORMANCE",
+            gl::DEBUG_TYPE_MARKER => "MARKER",
+            gl::DEBUG_TYPE_PUSH_GROUP => "PUSH_GROUP",
+            gl::DEBUG_TYPE_POP_GROUP => "POP_GROUP",
+            gl::DEBUG_TYPE_OTHER => "OTHER",
+            _ => "unknown",
+        },
+        id,
+    );
+}
 
 /// Struct handling GL information.
 ///
@@ -51,6 +84,22 @@ impl Ezgl {
         window: &winit::window::Window,
         prefer_samples: Option<u8>,
     ) -> Result<Self> {
+        Self::with_winit_window_and_debug_callback(window, prefer_samples, default_debug_callback)
+    }
+
+    /// Requires `feature = "winit"`.
+    ///
+    /// Set up ezgl using a winit [Window](winit::window::Window) directly, like
+    /// [Ezgl::with_winit_window], with a debug callback function parameter.
+    ///
+    /// The [HasContext::enable] function must be called with [gl::DEBUG_OUTPUT]
+    /// to enable debug output.
+    #[cfg(feature = "winit")]
+    pub fn with_winit_window_and_debug_callback<F: FnMut(u32, u32, u32, u32, &str) + 'static>(
+        window: &winit::window::Window,
+        prefer_samples: Option<u8>,
+        debug_callback: F,
+    ) -> Result<Self> {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
         #[cfg(unix)]
@@ -59,7 +108,7 @@ impl Ezgl {
         #[cfg(not(unix))]
         let reg = None;
 
-        Self::new(window, width, height, reg, prefer_samples)
+        Self::new_with_debug_callback(window, width, height, reg, prefer_samples, debug_callback)
     }
 
     /// Set up ezgl.
@@ -74,6 +123,28 @@ impl Ezgl {
         reg: Option<Reg>,
         prefer_samples: Option<u8>,
     ) -> Result<Self> {
+        Self::new_with_debug_callback(
+            window,
+            width,
+            height,
+            reg,
+            prefer_samples,
+            default_debug_callback,
+        )
+    }
+
+    /// Set up ezgl, with a debug callback.
+    pub fn new_with_debug_callback<
+        H: HasRawWindowHandle + HasRawDisplayHandle,
+        F: FnMut(u32, u32, u32, u32, &str) + 'static,
+    >(
+        window: &H,
+        width: u32,
+        height: u32,
+        reg: Option<Reg>,
+        prefer_samples: Option<u8>,
+        debug_callback: F,
+    ) -> Result<Self> {
         let display_handle = window.raw_display_handle();
         let window_handle = window.raw_window_handle();
         let display = create_display(display_handle, window_handle, reg)?;
@@ -84,13 +155,13 @@ impl Ezgl {
                 .find_configs(template)?
                 .reduce(|accum, config| {
                     if let Some(samples) = prefer_samples {
-                        if config.sample_buffers() == samples {
+                        if config.num_samples() == samples {
                             config
                         } else {
                             accum
                         }
                     } else {
-                        if config.sample_buffers() > accum.sample_buffers() {
+                        if config.num_samples() > accum.num_samples() {
                             config
                         } else {
                             accum
@@ -115,12 +186,18 @@ impl Ezgl {
         };
 
         let glutin = context.make_current(&surface)?;
-        let glow = Arc::new(unsafe {
+        let mut glow = unsafe {
             Context::from_loader_function(|symbol| {
                 let cstring = std::ffi::CString::new(symbol).unwrap();
-                glutin.get_proc_address(&cstring)
+                display.get_proc_address(&cstring)
             })
-        });
+        };
+
+        unsafe {
+            glow.debug_message_callback(debug_callback);
+        }
+
+        let glow = Arc::new(glow);
 
         Ok(Self {
             surface,
@@ -195,7 +272,7 @@ fn create_display(
     #[cfg(windows)]
     let preference = DisplayApiPreference::Wgl(Some(_raw_window_handle));
 
-    unsafe { Display::from_raw(raw_display, preference) }
+    unsafe { Display::new(raw_display, preference) }
 }
 
 fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
