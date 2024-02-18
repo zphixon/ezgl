@@ -2,7 +2,7 @@ use ezgl::{gl, Ezgl};
 use gl::HasContext;
 use winit::{
     event::{Event, WindowEvent},
-    event_loop::EventLoop,
+    event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 
@@ -22,7 +22,7 @@ fn main() {
     env_logger::init();
 
     // 1. make a window with HasRawWindowHandle + HasRawDisplayHandle
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut size = window.inner_size();
 
@@ -37,23 +37,21 @@ fn main() {
     // 3. off we go!
     unsafe { ezgl.clear_color(0.1, 0.2, 0.3, 1.0) };
 
-    use glutin::surface::GlSurface;
-
-    event_loop.run(move |evt, _, flow| {
+    let result = event_loop.run(move |evt, loop_target| {
         log::trace!("{:?}", evt);
         assert!(ezgl.surface().is_current(ezgl.glutin()));
 
-        flow.set_wait();
+        loop_target.set_control_flow(ControlFlow::Wait);
 
         match evt {
-            Event::RedrawRequested(_) => unsafe {
-                ezgl.clear(gl::COLOR_BUFFER_BIT);
-                ezgl.swap_buffers().unwrap();
-            },
-
             Event::WindowEvent { event, .. } => match event {
+                WindowEvent::RedrawRequested => unsafe {
+                    ezgl.clear(gl::COLOR_BUFFER_BIT);
+                    ezgl.swap_buffers().unwrap();
+                },
+
                 WindowEvent::CloseRequested => {
-                    flow.set_exit();
+                    loop_target.exit();
                 }
 
                 WindowEvent::Resized(new_size) => {
@@ -78,4 +76,6 @@ fn main() {
             _ => {}
         }
     });
+
+    result.unwrap();
 }
