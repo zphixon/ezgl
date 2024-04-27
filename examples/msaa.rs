@@ -1,126 +1,145 @@
-#[cfg(not(feature = "winit"))]
-fn main() {
-    panic!("this example requires winit");
-}
-
-#[cfg(feature = "winit")]
 fn main() {
     use ezgl::{gl, Ezgl};
-    use gl::HasContext;
+    use gl::{HasContext, NativeFramebuffer};
     use winit::{
-        event::{Event, WindowEvent},
-        event_loop::{ControlFlow, EventLoop},
-        window::WindowBuilder,
+        application::ApplicationHandler,
+        dpi::PhysicalSize,
+        event::WindowEvent,
+        event_loop::{ActiveEventLoop, EventLoop},
+        window::{Window, WindowAttributes, WindowId},
     };
 
     env_logger::init();
 
+    const SAMPLES: i32 = 4;
+
     // normal setup to begin with
     let event_loop = EventLoop::new().unwrap();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let mut size = window.inner_size();
+    event_loop.run_app(&mut State::default()).unwrap();
 
-    // pass preferred samples to constructor
-    let samples = 4i32;
-    let ezgl = Ezgl::with_winit_window(&window, Some(samples as u8)).unwrap();
+    #[derive(Default)]
+    struct State {
+        ezgl: Option<Ezgl>,
+        window: Option<Window>,
+        size: PhysicalSize<u32>,
+        fb: Option<NativeFramebuffer>,
+    }
 
-    // do msaa setup (see https://learnopengl.com/Advanced-OpenGL/Anti-Aliasing)
-    let fb = unsafe {
-        ezgl.enable(gl::DEBUG_OUTPUT);
+    impl ApplicationHandler for State {
+        fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+            if self.window.is_some() {
+                return;
+            }
 
-        ezgl.clear_color(0.1, 0.2, 0.3, 1.0);
-        ezgl.enable(gl::MULTISAMPLE);
+            let window = event_loop
+                .create_window(WindowAttributes::default())
+                .unwrap();
+            let size = window.inner_size();
 
-        // create framebuffer
-        let fb = ezgl.create_framebuffer().unwrap();
-        ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
+            let ezgl = Ezgl::with_winit_window(&window, Some(SAMPLES as u8)).unwrap();
 
-        // set up multisampled color attachment texture
-        let tex = ezgl.create_texture().unwrap();
-        ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, Some(tex));
-        ezgl.tex_image_2d_multisample(
-            gl::TEXTURE_2D_MULTISAMPLE,
-            samples,
-            gl::RGBA8 as i32,
-            size.width as i32,
-            size.height as i32,
-            true,
-        );
-        ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, None);
-        ezgl.framebuffer_texture_2d(
-            gl::FRAMEBUFFER,
-            gl::COLOR_ATTACHMENT0,
-            gl::TEXTURE_2D_MULTISAMPLE,
-            Some(tex),
-            0,
-        );
+            // do msaa setup (see https://learnopengl.com/Advanced-OpenGL/Anti-Aliasing)
+            let fb = unsafe {
+                ezgl.enable(gl::DEBUG_OUTPUT);
 
-        assert_eq!(
-            ezgl.check_framebuffer_status(gl::FRAMEBUFFER),
-            gl::FRAMEBUFFER_COMPLETE
-        );
+                ezgl.clear_color(0.1, 0.2, 0.3, 1.0);
+                ezgl.enable(gl::MULTISAMPLE);
 
-        ezgl.bind_framebuffer(gl::FRAMEBUFFER, None);
+                // create framebuffer
+                let fb = ezgl.create_framebuffer().unwrap();
+                ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
 
-        let vert = ezgl.create_shader(gl::VERTEX_SHADER).unwrap();
-        let frag = ezgl.create_shader(gl::FRAGMENT_SHADER).unwrap();
+                // set up multisampled color attachment texture
+                let tex = ezgl.create_texture().unwrap();
+                ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, Some(tex));
+                ezgl.tex_image_2d_multisample(
+                    gl::TEXTURE_2D_MULTISAMPLE,
+                    SAMPLES,
+                    gl::RGBA8 as i32,
+                    size.width as i32,
+                    size.height as i32,
+                    true,
+                );
+                ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, None);
+                ezgl.framebuffer_texture_2d(
+                    gl::FRAMEBUFFER,
+                    gl::COLOR_ATTACHMENT0,
+                    gl::TEXTURE_2D_MULTISAMPLE,
+                    Some(tex),
+                    0,
+                );
 
-        ezgl.shader_source(
-            vert,
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/examples/triangle.vert"
-            )),
-        );
-        ezgl.compile_shader(vert);
-        assert!(ezgl.get_shader_compile_status(vert));
+                assert_eq!(
+                    ezgl.check_framebuffer_status(gl::FRAMEBUFFER),
+                    gl::FRAMEBUFFER_COMPLETE
+                );
 
-        ezgl.shader_source(
-            frag,
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/examples/triangle.frag"
-            )),
-        );
-        ezgl.compile_shader(frag);
-        assert!(ezgl.get_shader_compile_status(frag));
+                ezgl.bind_framebuffer(gl::FRAMEBUFFER, None);
 
-        let program = ezgl.create_program().unwrap();
-        ezgl.attach_shader(program, vert);
-        ezgl.attach_shader(program, frag);
-        ezgl.link_program(program);
-        assert!(
-            ezgl.get_program_link_status(program),
-            "{}",
-            ezgl.get_program_info_log(program)
-        );
+                let vert = ezgl.create_shader(gl::VERTEX_SHADER).unwrap();
+                let frag = ezgl.create_shader(gl::FRAGMENT_SHADER).unwrap();
 
-        ezgl.use_program(Some(program));
+                ezgl.shader_source(
+                    vert,
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/examples/triangle.vert"
+                    )),
+                );
+                ezgl.compile_shader(vert);
+                assert!(ezgl.get_shader_compile_status(vert));
 
-        // now requires a vertex array be bound?
-        let triangle_vertex_array = ezgl.create_vertex_array().unwrap();
-        ezgl.bind_vertex_array(Some(triangle_vertex_array));
+                ezgl.shader_source(
+                    frag,
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/examples/triangle.frag"
+                    )),
+                );
+                ezgl.compile_shader(frag);
+                assert!(ezgl.get_shader_compile_status(frag));
 
-        fb
-    };
+                let program = ezgl.create_program().unwrap();
+                ezgl.attach_shader(program, vert);
+                ezgl.attach_shader(program, frag);
+                ezgl.link_program(program);
+                assert!(
+                    ezgl.get_program_link_status(program),
+                    "{}",
+                    ezgl.get_program_info_log(program)
+                );
 
-    let result = event_loop.run(move |evt, loop_target| {
-        log::trace!("{:?}", evt);
+                ezgl.use_program(Some(program));
 
-        loop_target.set_control_flow(ControlFlow::Wait);
+                // now requires a vertex array be bound?
+                let triangle_vertex_array = ezgl.create_vertex_array().unwrap();
+                ezgl.bind_vertex_array(Some(triangle_vertex_array));
 
-        match evt {
-            Event::WindowEvent { event, .. } => match event {
+                fb
+            };
+
+            self.ezgl = Some(ezgl);
+            self.window = Some(window);
+            self.size = size;
+            self.fb = Some(fb);
+        }
+
+        fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+            let ezgl = self.ezgl.as_ref().unwrap();
+            let window = self.window.as_ref().unwrap();
+            let size = self.size;
+
+            match event {
                 WindowEvent::RedrawRequested => unsafe {
                     // 1. bind multisampled framebuffer
-                    ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
+                    ezgl.bind_framebuffer(gl::FRAMEBUFFER, self.fb);
 
                     // 2. draw scene like normal
                     ezgl.clear(gl::COLOR_BUFFER_BIT);
                     ezgl.draw_arrays(gl::TRIANGLES, 0, 3);
 
                     // 3. copy multisampled buffer to backbuffer
-                    ezgl.bind_framebuffer(gl::READ_FRAMEBUFFER, Some(fb));
+                    ezgl.bind_framebuffer(gl::READ_FRAMEBUFFER, self.fb);
                     ezgl.bind_framebuffer(gl::DRAW_FRAMEBUFFER, None);
                     ezgl.blit_framebuffer(
                         0,
@@ -139,23 +158,23 @@ fn main() {
                 },
 
                 WindowEvent::CloseRequested => {
-                    loop_target.exit();
+                    event_loop.exit();
                 }
 
                 WindowEvent::Resized(new_size) => {
-                    size = new_size;
+                    self.size = new_size;
                     ezgl.resize(size.width, size.height);
 
                     unsafe {
                         ezgl.viewport(0, 0, size.width as i32, size.height as i32);
-                        ezgl.bind_framebuffer(gl::FRAMEBUFFER, Some(fb));
+                        ezgl.bind_framebuffer(gl::FRAMEBUFFER, self.fb);
 
                         // re-make multisampled color attachment texture
                         let tex = ezgl.create_texture().unwrap();
                         ezgl.bind_texture(gl::TEXTURE_2D_MULTISAMPLE, Some(tex));
                         ezgl.tex_image_2d_multisample(
                             gl::TEXTURE_2D_MULTISAMPLE,
-                            samples,
+                            SAMPLES,
                             gl::RGBA8 as i32,
                             size.width as i32,
                             size.height as i32,
@@ -183,11 +202,7 @@ fn main() {
                 },
 
                 _ => {}
-            },
-
-            _ => {}
+            }
         }
-    });
-
-    result.unwrap();
+    }
 }

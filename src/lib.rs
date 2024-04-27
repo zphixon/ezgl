@@ -75,11 +75,10 @@ pub struct Ezgl {
 }
 
 impl Ezgl {
-    /// Requires `feature = "winit"`.
+    /// Set up ezgl with an existing [Window](winit::window::Window).
     ///
     /// Set up ezgl using a winit [Window](winit::window::Window) directly, rather than through
     /// [HasRawWindowHandle] + [HasRawDisplayHandle] as in [Ezgl::new].
-    #[cfg(feature = "winit")]
     pub fn with_winit_window(
         window: &winit::window::Window,
         prefer_samples: Option<u8>,
@@ -87,14 +86,13 @@ impl Ezgl {
         Self::with_winit_window_and_debug_callback(window, prefer_samples, default_debug_callback)
     }
 
-    /// Requires `feature = "winit"`.
+    /// Set up ezgl with an existing [Window](winit::window::Window) directly.
     ///
     /// Set up ezgl using a winit [Window](winit::window::Window) directly, like
     /// [Ezgl::with_winit_window], with a debug callback function parameter.
     ///
     /// The [HasContext::enable] function must be called with [gl::DEBUG_OUTPUT]
     /// to enable debug output.
-    #[cfg(feature = "winit")]
     pub fn with_winit_window_and_debug_callback<F: FnMut(u32, u32, u32, u32, &str) + 'static>(
         window: &winit::window::Window,
         prefer_samples: Option<u8>,
