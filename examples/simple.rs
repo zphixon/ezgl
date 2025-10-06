@@ -78,6 +78,13 @@ fn main() {
                     self.window.as_ref().unwrap().request_redraw();
                 },
 
+                WindowEvent::ScaleFactorChanged {
+                    mut inner_size_writer,
+                    ..
+                } => {
+                    inner_size_writer.request_inner_size(self.size).unwrap();
+                }
+
                 _ => {}
             }
         }

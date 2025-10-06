@@ -162,6 +162,7 @@ fn main() {
                 }
 
                 WindowEvent::Resized(new_size) => {
+                    let size = new_size;
                     self.size = new_size;
                     ezgl.resize(size.width, size.height);
 
@@ -200,6 +201,13 @@ fn main() {
                     );
                     window.request_redraw();
                 },
+
+                WindowEvent::ScaleFactorChanged {
+                    mut inner_size_writer,
+                    ..
+                } => {
+                    inner_size_writer.request_inner_size(self.size).unwrap();
+                }
 
                 _ => {}
             }
