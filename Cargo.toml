@@ -4,11 +4,24 @@ version = "0.4.0"
 edition = "2021"
 
 [dependencies]
-glutin = { version = "0.31.3", features = ["wgl"] }
-glow = "0.13.1"
-raw-window-handle = "0.5.2"
-winit = { version = "0.30.0", features = ["rwh_05"] }
+glutin = { version = "0.32.3", features = ["wgl"] }
+glow = "0.16.0"
+raw-window-handle = { version = "0.6.2", features = ["std"] }
+thiserror = "2.0.17"
+winit = { version = "0.30.12", features = ["rwh_06"], optional = true }
 
 [dev-dependencies]
 env_logger = "*"
 log = "*"
+
+[features]
+ezgl_winit = ["dep:winit"]
+
+[[example]]
+name = "simple"
+required-features = ["ezgl_winit"]
+
+[[example]]
+name = "msaa"
+required-features = ["ezgl_winit"]
+

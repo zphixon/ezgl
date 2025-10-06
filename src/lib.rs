@@ -1,13 +1,13 @@
 //! Easy GL setup via [glutin]/[glow] for the user who doesn't care how they get their context.
 //!
-//! This crate reexports [glow] as `gl`, as well as [glutin] and [raw_window_handle]. Additionally
-//! [winit](docs.rs/winit) is available if `feature = "winit"` is enabled.
+//! This crate re-exports [glow] as `gl`, as well as [glutin] and [raw_window_handle]. Additionally
+//! [winit](docs.rs/winit) is available if `feature = "ezgl_winit"` is enabled.
 
 pub use glow as gl;
 pub use glutin;
 pub use raw_window_handle;
 
-#[cfg(feature = "winit")]
+#[cfg(feature = "ezgl_winit")]
 pub use winit;
 
 use gl::{Context, HasContext};
@@ -15,18 +15,28 @@ use glutin::{
     config::{ConfigSurfaceTypes, ConfigTemplate, ConfigTemplateBuilder, GlConfig},
     context::{ContextApi, ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
     display::{Display, GlDisplay},
-    error::Result,
     surface::{GlSurface, Surface, SurfaceAttributes, SurfaceAttributesBuilder, WindowSurface},
 };
-use raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::{num::NonZeroU32, sync::Arc};
 
-/// Duplicate of [glutin::api::glx::XlibErrorHookRegistrar], except without the OS-based feature
+/// Duplicate of `glutin::api::glx::XlibErrorHookRegistrar`, except without the OS-based feature
 /// gate.
 pub type Reg =
     Box<dyn Fn(Box<dyn Fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> bool + Send + Sync>)>;
+
+/// Possible errors.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Error in Glutin.
+    #[error("Glutin: {0}")]
+    Glutin(#[from] glutin::error::Error),
+
+    /// Error acquiring a [`WindowHandle`](raw_window_handle::WindowHandle) or
+    /// [`DisplayHandle`](raw_window_handle::DisplayHandle).
+    #[error("Rwh: {0}")]
+    Rwh(#[from] raw_window_handle::HandleError),
+}
 
 fn default_debug_callback(source: u32, type_: u32, id: u32, severity: u32, message: &str) {
     println!(
@@ -66,8 +76,9 @@ fn default_debug_callback(source: u32, type_: u32, id: u32, severity: u32, messa
 
 /// Struct handling GL information.
 ///
-/// This type implements Deref into [Context]. Note that [ezgl::gl::HasContext](glow::HasContext)
-/// must be in scope for GL functions to be available.
+/// This type implements Deref into [`Context`]. Note that
+/// [`ezgl::gl::HasContext`](glow::HasContext) must be in scope for GL functions
+/// to be available.
 pub struct Ezgl {
     surface: Surface<WindowSurface>,
     glutin: PossiblyCurrentContext,
@@ -75,29 +86,36 @@ pub struct Ezgl {
 }
 
 impl Ezgl {
-    /// Set up ezgl with an existing [Window](winit::window::Window).
+    /// Set up ezgl with an existing [`winit::window::Window`] and default debug
+    /// callback.
     ///
-    /// Set up ezgl using a winit [Window](winit::window::Window) directly, rather than through
-    /// [HasRawWindowHandle] + [HasRawDisplayHandle] as in [Ezgl::new].
+    /// Calls [`Ezgl::new`]. [`winit::window::Window`] implements
+    /// [`HasWindowHandle`] + [`HasDisplayHandle`]
+    #[cfg(feature = "ezgl_winit")]
     pub fn with_winit_window(
         window: &winit::window::Window,
         prefer_samples: Option<u8>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         Self::with_winit_window_and_debug_callback(window, prefer_samples, default_debug_callback)
     }
 
-    /// Set up ezgl with an existing [Window](winit::window::Window) directly.
+    /// Set up ezgl with an existing winit [`winit::window::Window`] and provide
+    /// a debug callback.
     ///
-    /// Set up ezgl using a winit [Window](winit::window::Window) directly, like
-    /// [Ezgl::with_winit_window], with a debug callback function parameter.
+    /// Calls [`Ezgl::new_with_debug_callback`]. [`winit::window::Window`]
+    /// implements [`HasWindowHandle`] + [`HasDisplayHandle`].
     ///
-    /// The [HasContext::enable] function must be called with [gl::DEBUG_OUTPUT]
-    /// to enable debug output.
-    pub fn with_winit_window_and_debug_callback<F: FnMut(u32, u32, u32, u32, &str) + 'static>(
+    /// The [`HasContext::enable`] function must be called with
+    /// [`gl::DEBUG_OUTPUT`] to enable debug output.
+    #[cfg(feature = "ezgl_winit")]
+    pub fn with_winit_window_and_debug_callback<F>(
         window: &winit::window::Window,
         prefer_samples: Option<u8>,
         debug_callback: F,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error>
+    where
+        F: for<'a> Fn(u32, u32, u32, u32, &'a str) + Sync + Send + 'static,
+    {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
         #[cfg(unix)]
@@ -109,18 +127,21 @@ impl Ezgl {
         Self::new_with_debug_callback(window, width, height, reg, prefer_samples, debug_callback)
     }
 
-    /// Set up ezgl.
+    /// Set up ezgl with a default debug callback.
     ///
-    /// Requires a window that implements [HasRawWindowHandle] + [HasRawDisplayHandle]. If
-    /// `prefer_samples` is None, the context configuration with the greatest number of sample
-    /// buffers is preferred.
-    pub fn new<H: HasRawWindowHandle + HasRawDisplayHandle>(
+    /// Requires a window that implements [`HasWindowHandle`] +
+    /// [`HasDisplayHandle`]. If `prefer_samples` is None, the context
+    /// configuration with the greatest number of sample buffers is preferred.
+    pub fn new<H>(
         window: &H,
         width: u32,
         height: u32,
         reg: Option<Reg>,
         prefer_samples: Option<u8>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error>
+    where
+        H: HasWindowHandle + HasDisplayHandle,
+    {
         Self::new_with_debug_callback(
             window,
             width,
@@ -132,19 +153,20 @@ impl Ezgl {
     }
 
     /// Set up ezgl, with a debug callback.
-    pub fn new_with_debug_callback<
-        H: HasRawWindowHandle + HasRawDisplayHandle,
-        F: FnMut(u32, u32, u32, u32, &str) + 'static,
-    >(
+    pub fn new_with_debug_callback<H, F>(
         window: &H,
         width: u32,
         height: u32,
         reg: Option<Reg>,
         prefer_samples: Option<u8>,
         debug_callback: F,
-    ) -> Result<Self> {
-        let display_handle = window.raw_display_handle();
-        let window_handle = window.raw_window_handle();
+    ) -> Result<Self, Error>
+    where
+        H: HasWindowHandle + HasDisplayHandle,
+        F: for<'a> Fn(u32, u32, u32, u32, &'a str) + Sync + Send + 'static,
+    {
+        let display_handle = window.display_handle()?.as_raw();
+        let window_handle = window.window_handle()?.as_raw();
         let display = create_display(display_handle, window_handle, reg)?;
         let template = config_template(window_handle);
 
@@ -169,7 +191,7 @@ impl Ezgl {
                 .expect("No configs found :(")
         };
 
-        let attributes = surface_attributes(&window, width, height);
+        let attributes = surface_attributes(&window, width, height)?;
         let surface = unsafe { display.create_window_surface(&config, &attributes)? };
         let context_attributes = ContextAttributesBuilder::new().build(Some(window_handle));
 
@@ -206,8 +228,8 @@ impl Ezgl {
 
     /// Resize the GL surface.
     ///
-    /// This method does not resize the GL viewport. If width or height are zero this method does
-    /// nothing. Delegates to [Surface::resize].
+    /// This method does not resize the GL viewport. If width or height are zero
+    /// this method does nothing. Delegates to [`Surface::resize`].
     pub fn resize(&self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -222,12 +244,13 @@ impl Ezgl {
 
     /// Display the next frame.
     ///
-    /// Delegates to [Surface::swap_buffers].
-    pub fn swap_buffers(&self) -> Result<()> {
-        self.surface.swap_buffers(&self.glutin)
+    /// Delegates to [`Surface::swap_buffers`].
+    pub fn swap_buffers(&self) -> Result<(), Error> {
+        self.surface.swap_buffers(&self.glutin)?;
+        Ok(())
     }
 
-    /// Increase the reference count of the inner glow [Context].
+    /// Increase the reference count of the inner glow [`Context`].
     pub fn glow_context(&self) -> Arc<Context> {
         Arc::clone(&self.glow)
     }
@@ -254,7 +277,7 @@ fn create_display(
     raw_display: RawDisplayHandle,
     _raw_window_handle: RawWindowHandle,
     _reg: Option<Reg>,
-) -> Result<Display> {
+) -> Result<Display, Error> {
     use glutin::display::DisplayApiPreference;
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -270,7 +293,7 @@ fn create_display(
     #[cfg(windows)]
     let preference = DisplayApiPreference::Wgl(Some(_raw_window_handle));
 
-    unsafe { Display::new(raw_display, preference) }
+    unsafe { Ok(Display::new(raw_display, preference)?) }
 }
 
 fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
@@ -282,17 +305,17 @@ fn config_template(raw_window_handle: RawWindowHandle) -> ConfigTemplate {
     builder.build()
 }
 
-fn surface_attributes<H: HasRawWindowHandle + HasRawDisplayHandle>(
+fn surface_attributes<H: HasWindowHandle + HasDisplayHandle>(
     window: &H,
     width: u32,
     height: u32,
-) -> SurfaceAttributes<WindowSurface> {
-    let raw_window_handle = window.raw_window_handle();
-    SurfaceAttributesBuilder::<WindowSurface>::new()
+) -> Result<SurfaceAttributes<WindowSurface>, Error> {
+    let raw_window_handle = window.window_handle()?.as_raw();
+    Ok(SurfaceAttributesBuilder::<WindowSurface>::new()
         .with_srgb(Some(true))
         .build(
             raw_window_handle,
             NonZeroU32::new(width).unwrap(),
             NonZeroU32::new(height).unwrap(),
-        )
+        ))
 }

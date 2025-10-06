@@ -1,4 +1,4 @@
-use ezgl::{gl, Ezgl};
+use ezgl::{gl, winit, Ezgl};
 use gl::HasContext;
 use winit::{
     application::ApplicationHandler,

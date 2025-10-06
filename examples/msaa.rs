@@ -1,5 +1,5 @@
 fn main() {
-    use ezgl::{gl, Ezgl};
+    use ezgl::{gl, winit, Ezgl};
     use gl::{HasContext, NativeFramebuffer};
     use winit::{
         application::ApplicationHandler,
