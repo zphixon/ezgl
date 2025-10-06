@@ -118,10 +118,10 @@ impl Ezgl {
     {
         let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         let reg = Some(Box::new(winit::platform::x11::register_xlib_error_hook) as Reg);
 
-        #[cfg(not(unix))]
+        #[cfg(not(target_os = "linux"))]
         let reg = None;
 
         Self::new_with_debug_callback(window, width, height, reg, prefer_samples, debug_callback)
