@@ -2,13 +2,33 @@ name: Push
 on: [push]
 
 jobs:
-  build:
-    runs-on: [ubuntu-latest, windows-latest, macos-latest]
+  linux:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
-
-    - name: Check without winit
+    - name: ${{ runner.os }} Check without winit
       run: cargo check --all-targets
-
-    - name: Check with winit
+    - name: ${{ runner.os }} Check with winit
       run: cargo check --all-targets --all-features
+    - name: ${{ runner.os }} Build docs
+      run: cargo doc --all-features
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: ${{ runner.os }} Check without winit
+      run: cargo check --all-targets
+    - name: ${{ runner.os }} Check with winit
+      run: cargo check --all-targets --all-features
+
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: ${{ runner.os }} Check without winit
+      run: cargo check --all-targets
+    - name: ${{ runner.os }} Check with winit
+      run: cargo check --all-targets --all-features
+
